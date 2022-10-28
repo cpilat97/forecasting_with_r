@@ -1,0 +1,190 @@
+---
+title: "Chapter 1"
+output: html_document
+date: "2022-10-21"
+---
+
+```{r include=FALSE}
+library(fpp3)
+```
+
+# Chapter 1
+
+Predictability depends on:
+
+1.  Understanding contributing factors
+2.  Available data
+3.  Similarity of future to past events
+4.  can forecasts affect that being forecasted (self-fulfilling)
+
+We need to be aware of our own limitations, not claiming more than possible
+
+A key step in good forecasting is knowing the diff between what can be forecasted and whats essentially a coin flip.
+
+Business forecasting is often mixed/muddled with goals & planning:
+
+-   Forecasting is predicing the future as accurately as possible given X information.
+
+-   Goals are what we'd like to happen. Should be linked to forecasts/plans, but are often set w/o any plan for achieving them.
+
+-   Planning is a response to forecasts & goals...determining appropriate actions.
+
+Determining what to forecast:
+
+-   In the beginning of a project, decide what should be forecast & what the necessary components of a forecast will be.
+
+Examples of time series forecasting:
+
+-   annual profits
+
+-   quarterly sales
+
+-   monthly rainfall
+
+-   weekly retail sales
+
+-   Stock prices
+
+-   Traffic counts
+
+Time series relationships are not exact and will always contain some degree of error, which allows for some random variation and variables that may not be included in the model.
+
+A normal predictor equation might look like: ED=f(current temperature, strength of economy, population,time of day, day of week, error)
+
+whereas a time series model may look like:
+
+$\text{ED}_{t+1} = f(\text{ED}_{t}, \text{ED}_{t-1}, \text{ED}_{t-2}, \text{ED}_{t-3},\dots, \text{error}),$
+
+which allows future vars to be predicated based on past values of a var.
+
+### Basic steps in forecasting tasks
+
+1.  Problem Definition
+    1.  Clearly defining the problem requires an understanding of the way forecasts will be used, who requires the forecasts, and how it will fit within the org. Forecasters need to spend time talking to everyone invoked in collecting data, maintaining databases, and who will be using the forecasts.
+2.  Gathering Info
+    1.  Stats data
+
+    2.  Accumulated expertise of people collecting.
+
+    3.  Occasionally old data is less useful due to changes in systems.
+3.  Prelim Exploratory Analysis
+    1.  Graph, look for patterns, significant trends? Seasonal Importance? Business cycles? Outliers?
+4.  Choosing & Fitting models
+    1.  Compare two or three potential models
+5.  Using & Evaluating a forecast model
+    1.  After model selection & parameter estimation, the performance can only be evaluated after periods of time are available.
+
+### Forecasting Perspectives
+
+-   We can think of the thing we're trying to forecast as a random var since it's unknown.
+
+-   Generally, the variation associated w/ what we're forecasting shrinks as the event approaches (given X data, it's easier to have a more acc prediction for a month from now than a year).
+
+-   Forecasts are usually accompanied by a prediction interval providing a range of vals that w/in an expected probability.
+
+-   Point forecasts are the average of the possible future vals
+
+# Chapter 2 - Time series graphs
+
+### 2.1 `tsibble` objects
+
+**Index variables**:
+
+You can think of time series as a list of numbers, and can create tsibble objects just like a normal `tibble` object:
+
+```{r}
+y <- tsibble(
+  Year = 2015:2019,
+  Observation = c(123, 39, 78, 52, 110),
+  index = Year
+)
+```
+
+`tsibbles` build ontop of tibbles by seeting the index which creates temporal structures. In the above the year is the index. If you call `str()` on the object, you can see embedded s3 classes on the backend w/ a given attribute:
+
+```{r}
+str(y)
+```
+
+You can convert months into indexes calling the `yearmonth` func:
+
+```{r yearmonth, include=TRUE, eval=FALSE}
+z %>% 
+  mutate(Month = yearmonth(Month)) %>% 
+  as_tsibble(index = Month)
+```
+
+There are additional class functions depending on how your data is structured:
+
+-   Annual `start:end`
+-   Quarterly `yearquarter()`
+-   Montholy `yearmonth()`
+-   Weekly `yearweek()`
+-   Daily `as_date()`, `ymd()`
+-   sub-daily `as_datetime()`, `ymd_hms()`
+
+**The index column is always the time index column** identify that column for the index.
+
+**Key Variables:**
+
+If you have specific key vars, like sex, you can set and store those in the tsibble object.
+
+In the olympic swimmers dataset length & sex are the keys:
+
+```{r}
+olympic_running
+```
+
+`tsibble` objects can also take normal dplyr verbs & functions:
+
+```{r}
+PBS %>%
+  filter(ATC2 == "A10") %>%
+  select(Month, Concession, Type, Cost) %>%
+  summarise(TotalC = sum(Cost)) %>%
+  mutate(Cost = TotalC / 1e6) -> a10
+```
+
+**Converting to tsibbles**. you can convert normal data (ie data read from a db or csv) by calling `as_tsibble(key = keyvalues, index = time_index_value)`.
+
+**For a tsibble to be valid, it requires a unique index for each combination of keys**
+
+### 2.2 - Time Plots
+
+The best place to start is with time plots which show a given point over time, for example:
+
+```{r}
+melsyd_economy <- ansett %>%
+  filter(Airports == "MEL-SYD", Class == "Economy") %>%
+  mutate(Passengers = Passengers/1000)
+autoplot(melsyd_economy, Passengers) +
+  labs(title = "Ansett airlines economy class",
+       subtitle = "Melbourne-Sydney",
+       y = "Passengers ('000)")
+```
+
+The `autoplot` command is really helpful to start getting plots going rather than trying to meticulously get things together yourself. While it might not produce a polished final graph for you, it's helpful in getting going and visualizing the data. You can glean a lot of useful information by looking at how the data varies over a given time period.
+
+```{r}
+autoplot(a10, Cost) +
+  labs(y = "$ (millions)",
+       title = "Australian antidiabetic drug sales")
+```
+
+### 2.3 Timer Series Patterns
+
+1.  Trend - exists when there's longterm increases or decreases in data, doesn't have to be linear.
+2.  Seasonal - Pattern occurs when a `ts` is affected by seasonal factors like time of year/day. Should be fixed & known period. Associated with the calendar and are fixed (holiday season/summer travel/school)
+3.  Cyclic - rises & falls that are not tied to a fixed frequency. Usually at least two years. (bear/bull markets).
+
+### 2.4 Seasonal Plots
+
+Seasonal plots are like time plots e/c plotted against individual seasons.
+
+```{r}
+a10 %>% 
+  gg_season(Cost, labels = "both") + 
+  labs(y = "$", 
+       title = "seasonal plot: antidiabetic drug sales")
+
+```
