@@ -188,3 +188,233 @@ a10 %>%
        title = "seasonal plot: antidiabetic drug sales")
 
 ```
+
+(Note that seasons doesn't necessarily refer to the seasons of the weather. Seasons are any cyclical, expected changes throughout the year). Seasonal can be a daily cycle like with electricity - a peak during the afternoon, dips at midnight, etc...
+
+```{r}
+vic_elec %>% gg_season(Demand, period = "day") +
+  theme(legend.position = "none") +
+  labs(y="MWh", title="Electricity demand: Victoria")
+
+vic_elec %>% gg_season(Demand, period = "week") +
+  theme(legend.position = "none") +
+  labs(y="MWh", title="Electricity demand: Victoria")
+```
+
+### 2.5 - Seasonal Sub-Queries
+
+```{r}
+a10 %>%
+  gg_subseries(Cost) +
+  labs(
+    y = "$ (millions)",
+    title = "Australian antidiabetic drug sales"
+  )
+```
+
+You can show the seasonal plots per year per month. So you can see how certain things perform each month over the years.
+
+```{r}
+holidays <- tourism %>%
+  filter(Purpose == "Holiday") %>%
+  group_by(State) %>%
+  summarise(Trips = sum(Trips))
+
+autoplot(holidays, Trips) +
+  labs(y = "Overnight trips ('000)",
+       title = "Australian domestic holidays")
+
+gg_season(holidays, Trips) +
+  labs(y = "Overnight trips ('000)",
+       title = "Australian domestic holidays")
+```
+
+### 2.6 - Scatterplots
+
+You can use scatterplots to examine the relationship between two objects/series against one another.
+
+```{r}
+vic_elec %>%
+  filter(year(Time) == 2014) %>%
+  ggplot(aes(x = Temperature, y = Demand)) +
+  geom_point() +
+  labs(x = "Temperature (degrees Celsius)",
+       y = "Electricity demand (GW)")
+```
+
+Scatterplots are also a good way to start examining the correlation between objects - visually looking at the relationship (perceived or not) between two objects.
+
+It's usefull to plot variables against one another in order to view/exmaine the relationship between vars and how they might correlate to one another.
+
+```{r}
+visitors <- tourism %>%
+  group_by(State) %>%
+  summarise(Trips = sum(Trips))
+visitors %>%
+  ggplot(aes(x = Quarter, y = Trips)) +
+  geom_line() +
+  facet_grid(vars(State), scales = "free_y") +
+  labs(title = "Australian domestic tourism",
+       y= "Overnight trips ('000)")
+```
+
+You can easily do this with the `ggally` package and create a correlation matrix against one another.
+
+```{r}
+visitors %>%
+  pivot_wider(values_from=Trips, names_from=State) %>%
+  GGally::ggpairs(columns = 2:9)
+```
+
+### 2.7 - Lag plots
+
+Use the `gg_lag` function to create lag plots from your tsibble and the var you're looking at (in the example case, it's beer). Lag plots are essentially looking/examining the randomness of the data. So in the example there are two plots, lag 4 & 8, that are showing positive correlations.
+
+```{r}
+recent_production <- aus_production %>%
+  filter(year(Quarter) >= 2000)
+recent_production %>%
+  gg_lag(Beer, geom = "point") +
+  labs(x = "lag(Beer, k)")
+```
+
+### 2.8 - Autocorrelation
+
+You can also use auto correlations to measure the linear relationship between lagged values:
+
+```{r}
+recent_production %>% ACF(Beer, lag_max = 9)
+recent_production %>% ACF(Beer, lag_max = 9)
+
+recent_production %>%
+  ACF(Beer) %>%
+  autoplot() + labs(title="Australian beer production")
+```
+
+acf here is referring to the vals in the 9 scatterplots & how correlated they are.
+
+### 2.9 - White Noise
+
+Time series with **NO** autocorrelation are considered white noise:
+
+```{r}
+set.seed(30)
+y <- tsibble(sample = 1:50, wn = rnorm(50), index = sample)
+y %>% autoplot(wn) + labs(title = "White noise", y = "")
+```
+
+### 2.10 - Exercises
+
+# Chapter 3 - Time series decomp
+
+### 3.1 - Transformations & Adjustments
+
+There are four kinds of transformations that you can make to make dealing with time series a little bit easier: calendar adjustments, population adjustments, inflation adjustments and mathematical transformations. In general this is to make it simpler to deal with time series data and a bit more digestible.
+
+-   Calendar Adjustments: Removing seasonal variation from a `TS` before doing any further analysis. ie, using the average sale of a given day when comparing monthly sales since months have different days which can affect total sales numbers.
+
+-   Population Adjustments: Population adjustments are essentially changing the data from a population number to a per capital number (ie XX per 10000 people) to standardize the number of people in a dataset.
+
+-   Inflation Adjustments: Inflation adjustments come into play when you're working with monetary data, as the price of items will increase over time due to inflation. In these cases, price index's will be used to compare prices against one another (ie you may state that all prices reflected are in 2000 money). The `Common Price Index` is the common one that most people utilize.
+
+-   Mathematical Transformations: These are when you use mathematical formulas to transform data - log scales are a common example, power transformations (square or cubed-root transformations).
+
+### 3.2 - Time series components
+
+Additive decompositions are written as: yt=St+Tt+Rt\
+
+### 3.3 - Moving Averages
+
+Moving averages are used in classical decomposition and are used to estimate the trend-cycle. The general idea here is that we can get an estimate of the trend cycle at time *t* by averaging the values in a time series. Averages close in time are more likely to be related/a good approximation and so the averages eliminate some of the randomness that may occur. This is called m-**MA** or a moving average of order *m*. The following formula is used: m=2k+1\
+
+```{r}
+global_economy %>%
+  filter(Country == "Australia") %>%
+  autoplot(Exports) +
+  labs(y = "% of GDP", title = "Total Australian exports")
+```
+
+So if you wanted a 5-**MA**, that would be a 5 year moving average. This can be computed using the `slider_dbl()` function from the `slider` pckg:
+
+```{r}
+aus_exports <- global_economy %>%
+  filter(Country == "Australia") %>%
+  mutate(#2yrs before, current year, 2yrs after = 5yr MA
+    `5-MA` = slider::slide_dbl(Exports, mean,
+                .before = 2, .after = 2, .complete = TRUE)
+  )
+```
+
+Which can then be plotted:
+
+```{r}
+aus_exports %>%
+  autoplot(Exports) +
+  geom_line(aes(y = `5-MA`), colour = "#D55E00") +
+  labs(y = "% of GDP",
+       title = "Total Australian exports") +
+  guides(colour = guide_legend(title = "series"))
+```
+
+It's best to stick with odd numbers to keep the moving avg symmetrical, x years before, current year, x years after. You can also apply a moving average of a moving average in order; One reason for doing this is to make an even-order moving average symmetric:
+
+```{r}
+beer <- aus_production %>%
+  filter(year(Quarter) >= 1992) %>%
+  select(Quarter, Beer)
+beer_ma <- beer %>%
+  mutate(
+    `4-MA` = slider::slide_dbl(Beer, mean,
+                .before = 1, .after = 2, .complete = TRUE),
+    `2x4-MA` = slider::slide_dbl(`4-MA`, mean,
+                .before = 1, .after = 0, .complete = TRUE)
+  )
+```
+
+Note that to compute the 4-MA, we use only 1 year before and then 2 years after and then the 2-MA is only taking one year before. This brings symmetry back into the fold.
+
+You're most likely to use moving averages when estimating the trend-cycle from seasonal data. For example, observe the following data:
+
+```{r}
+us_retail_employment_ma <- us_retail_employment %>%
+  mutate(
+    `12-MA` = slider::slide_dbl(Employed, mean,
+                .before = 5, .after = 6, .complete = TRUE),
+    `2x12-MA` = slider::slide_dbl(`12-MA`, mean,
+                .before = 1, .after = 0, .complete = TRUE)
+  )
+us_retail_employment_ma %>%
+  autoplot(Employed, colour = "gray") +
+  geom_line(aes(y = `2x12-MA`), colour = "#D55E00") +
+  labs(y = "Persons (thousands)",
+       title = "Total employment in US retail")
+```
+
+When you combine moving averages they become known as *weighted-moving averages*.
+
+### 3.4 - Classical Decomposition 
+
+The two forms of classical decomp are:
+
+-   Additive decomp:
+
+    ```{r}
+    us_retail_employment %>%
+      model(
+        classical_decomposition(Employed, type = "additive")
+      ) %>%
+      components() %>%
+      autoplot() +
+      labs(title = "Classical additive decomposition of total
+                      US retail employment")
+    ```
+
+-   Multiplicative decomp
+
+### 3.5 - Other decomp methods
+
+**X-11**- x-11 is was dev'd by the us census, and is fairly robust to outliers. It handles holiday effects and effects of known predictors.
+
+**SEATS Method** - easonal Extraction in ARIMA Time Series
+
+### 3.6 - STL Decomp
