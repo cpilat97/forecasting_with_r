@@ -307,6 +307,14 @@ y %>% autoplot(wn) + labs(title = "White noise", y = "")
 
 # Chapter 3 - Time series decomp
 
+**What is decomposition?** - Decomp is essentially taking a time series object and breaking it into it's individual components, often combining trends and cycles into a single **trend-cycle** component. Thus time series have three components (generally):
+
+1.  Trend-cycle
+2.  Seasonal
+3.  Remainder (anything else in the TS).
+
+When starting a decomp, its can be helpful to transform or adjust to make it as simple as possible.
+
 ### 3.1 - Transformations & Adjustments
 
 There are four kinds of transformations that you can make to make dealing with time series a little bit easier: calendar adjustments, population adjustments, inflation adjustments and mathematical transformations. In general this is to make it simpler to deal with time series data and a bit more digestible.
